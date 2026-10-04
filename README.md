@@ -1,4 +1,4 @@
-# CBT - Click Before Tick v1.0 Alpha
+# CBT - Click Before Tick Alpha
 
 Experimental Android64 Geometry Dash 2.2081 Geode mod.
 
