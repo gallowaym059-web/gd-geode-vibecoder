@@ -1,0 +1,11 @@
+{
+    "geode": "5.10.1",
+    "gd": {
+        "android": "2.2081"
+    },
+    "id": "gallowaym059.cbt",
+    "name": "CBT - Click Before Tick",
+    "version": "v1.1.0",
+    "developer": "gallowaym059",
+    "description": "Input offset, auto clicker, timescale, TPS sub-stepping, anti-lag, music resync and more, controlled from a draggable in-game menu."
+}
