@@ -1,0 +1,42 @@
+{
+  "geode": "v5.10.1",
+  "gd": { "android": "2.2081" },
+  "id": "gallowaym059.cbt",
+  "name": "CBT - Click Before Tick",
+  "version": "v1.0.0-alpha.1",
+  "developer": "gallowaym059-web",
+  "description": "Experimental Click Before Tick timing, TPS bypass and QoL controls for Android64.",
+  "settings": {
+    "timing-title": { "type": "title", "name": "CBT Timing" },
+    "enabled": {
+      "type": "bool", "default": true, "name": "Enable CBT",
+      "description": "Enables the experimental input-timing layer. Alpha quality."
+    },
+    "precision-ms": {
+      "type": "int", "default": 0, "min": -65, "max": 65,
+      "name": "Input Precision (ms)",
+      "description": "0ms = no timing bias. Negative values advance the input timestamp; positive values delay it. This is an experimental timing bias, not a guarantee of physical input before hardware delivery.",
+      "control": { "slider": true, "slider-step": 1, "arrows": true, "arrow-step": 1, "big-arrows": true, "big-arrow-step": 5, "input": true }
+    },
+    "extrapolate": {
+      "type": "bool", "default": false, "name": "CBT Extrapolate",
+      "description": "Experimental extrapolation of the input timestamp inside the physics step."
+    },
+    "tps-title": { "type": "title", "name": "Physics" },
+    "tps": {
+      "type": "int", "default": 240, "min": 240, "max": 1000,
+      "name": "Physics TPS",
+      "description": "Experimental physics bypass target. 240 is vanilla; higher values subdivide elapsed time.",
+      "control": { "slider": true, "slider-step": 1, "arrows": true, "arrow-step": 1, "big-arrows": true, "big-arrow-step": 10, "input": true }
+    },
+    "fps-title": { "type": "title", "name": "Display / Safety" },
+    "show-overlay": {
+      "type": "bool", "default": true, "name": "Show Overlay",
+      "description": "Shows CBT timing and TPS status while playing."
+    },
+    "safe-mode": {
+      "type": "bool", "default": true, "name": "Safe Mode",
+      "description": "Marks completions as test-mode while experimental timing/TPS features are active."
+    }
+  }
+}
