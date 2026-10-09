@@ -4,7 +4,7 @@ Experimental Android64 Geometry Dash 2.2081 Geode mod.
 
 ## Features
 
-- Input Precision slider: **-65ms to +65ms** in 1ms steps.
+- Input Precision slider: **-60,000.0ms to +60,000.0ms** in 1ms steps.
   - `0ms`: no timestamp bias.
   - Negative: advances the queued input timestamp relative to the physics timeline.
   - Positive: delays the queued input timestamp.
