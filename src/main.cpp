@@ -40,7 +40,7 @@ namespace cbt {
         bool tpsOn = false;        double tps = 480.0;
         bool fpsOn = false;        double fps = 120.0;
         // Smooth
-        bool antiLag = false;      double lagSens = 2.5;
+        bool antiLag = false;      double lagSens = 1.5;
         bool musicSync = false;    double syncMs = 80.0;
         // Game
         bool autoRestart = false;  double restartDelay = 0.0;
@@ -67,12 +67,12 @@ namespace cbt {
     X(restartDelay) X(btnOpacity) X(btnScale) X(btnX) X(btnY)
 
     inline void sanitize() {
-        cfg.offsetMs = std::clamp(cfg.offsetMs, -350.0, 350.0);
+        cfg.offsetMs = std::clamp(cfg.offsetMs, -60000.0, 60000.0);
         cfg.cps = std::clamp(cfg.cps, 1.0, 240.0);
         cfg.timescale = std::clamp(cfg.timescale, 0.1, 10.0);
         cfg.tps = std::clamp(cfg.tps, 240.0, 1000.0);
         cfg.fps = std::clamp(cfg.fps, 30.0, 360.0);
-        cfg.lagSens = std::clamp(cfg.lagSens, 1.5, 8.0);
+        cfg.lagSens = std::clamp(cfg.lagSens, 0.5, 8.0);
         cfg.syncMs = std::clamp(cfg.syncMs, 20.0, 500.0);
         cfg.restartDelay = std::clamp(cfg.restartDelay, 0.0, 3.0);
         cfg.btnOpacity = std::clamp(cfg.btnOpacity, 0.15, 1.0);
