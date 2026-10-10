@@ -40,7 +40,7 @@ namespace cbt {
         bool tpsOn = false;        double tps = 480.0;
         bool fpsOn = false;        double fps = 120.0;
         // Smooth
-        bool antiLag = false;      double lagSens = 1.5;
+        bool antiLag = false;      double lagSens = 2.5;
         bool musicSync = false;    double syncMs = 80.0;
         // Game
         bool autoRestart = false;  double restartDelay = 0.0;
@@ -67,12 +67,12 @@ namespace cbt {
     X(restartDelay) X(btnOpacity) X(btnScale) X(btnX) X(btnY)
 
     inline void sanitize() {
-        cfg.offsetMs = std::clamp(cfg.offsetMs, -60000.0, 60000.0);
+        cfg.offsetMs = std::clamp(cfg.offsetMs, -350.0, 350.0);
         cfg.cps = std::clamp(cfg.cps, 1.0, 240.0);
         cfg.timescale = std::clamp(cfg.timescale, 0.1, 10.0);
         cfg.tps = std::clamp(cfg.tps, 240.0, 1000.0);
         cfg.fps = std::clamp(cfg.fps, 30.0, 360.0);
-        cfg.lagSens = std::clamp(cfg.lagSens, 0.5, 8.0);
+        cfg.lagSens = std::clamp(cfg.lagSens, 1.5, 8.0);
         cfg.syncMs = std::clamp(cfg.syncMs, 20.0, 500.0);
         cfg.restartDelay = std::clamp(cfg.restartDelay, 0.0, 3.0);
         cfg.btnOpacity = std::clamp(cfg.btnOpacity, 0.15, 1.0);
@@ -106,15 +106,16 @@ namespace cbt {
         ).count();
     }
 
-    struct Pending {
-        bool down;
-        int button;
-        bool p1;
-        double due;   // real time (seconds) at which to deliver
+    struct Held {
+        PlayerButton button;
+        bool push;
+        bool isP2;
+        double due;   // real time (seconds) at which to apply
     };
 
-    inline std::deque<Pending> pending;
+    inline std::deque<Held> held;
     inline bool delivering = false;     // true while WE call handleButton
+    inline bool applied[2][4] = {};     // what the game thinks is held [p1 ? 0 : 1][button]
     inline bool userHold = false;       // physical jump-button state
     inline bool synthDown = false;      // auto clicker's current state
     inline double acTimer = 0.0;
@@ -170,18 +171,64 @@ namespace cbt {
         return static_cast<int>(clickTimes.size());
     }
 
-    // Calls the game's handleButton without our own hook interfering.
-    inline void deliver(GJBaseGameLayer* l, bool down, int button, bool p1) {
+    // True when we own the game's input queue (offset or clicker is on).
+    inline bool takeActive() {
+        return cfg.offsetOn || cfg.clickerOn;
+    }
+
+    inline void playClickSound() {
+        if (!cfg.clickSound) return;
+        if (auto fmod = FMODAudioEngine::sharedEngine()) {
+            fmod->playEffect("playSound_01.ogg", 1.f, 0.f, 0.5f);
+        }
+    }
+
+    // Applies one input the same way the game itself does.
+    inline void deliver(GJBaseGameLayer* l, bool down, int button, bool isPlayer1) {
         delivering = true;
-        l->handleButton(down, button, p1);
+        l->handleButton(down, button, isPlayer1);
         delivering = false;
     }
 
-    inline void flushPending(GJBaseGameLayer* l) {
-        while (!pending.empty()) {
-            auto p = pending.front();
-            pending.pop_front();
-            deliver(l, p.down, p.button, p.p1);
+    inline void flushHeld(GJBaseGameLayer* l) {
+        while (!held.empty()) {
+            auto h = held.front();
+            held.pop_front();
+            deliver(l, h.push, static_cast<int>(h.button), !h.isP2);
+        }
+    }
+
+    // Moves new real inputs out of the game's own queue. Nothing is ever
+    // swallowed: every command is either handed back to the game untouched,
+    // held for the offset delay, or (jump only) replaced by the auto clicker.
+    inline void takeInputs(GJBaseGameLayer* l, double t0) {
+        auto& q = l->m_queuedButtons;
+        if (q.empty()) return;
+
+        std::vector<PlayerButtonCommand> cmds(q.begin(), q.end());
+        q.clear();
+
+        for (auto const& c : cmds) {
+            bool jump = c.m_button == PlayerButton::Jump;
+
+            if (jump && !c.m_isPlayer2) {
+                userHold = c.m_isPush;
+                if (c.m_isPush) {
+                    registerClick();
+                    playClickSound();
+                }
+            }
+
+            if (cfg.clickerOn && jump) continue;   // the clicker owns jump
+
+            if (cfg.offsetOn) {
+                held.push_back({
+                    c.m_button, c.m_isPush, c.m_isPlayer2,
+                    t0 + cfg.offsetMs / 1000.0
+                });
+            } else {
+                q.push_back(c);
+            }
         }
     }
 
@@ -312,7 +359,10 @@ namespace cbt {
     }
 
     inline void resetRuntime() {
-        pending.clear();
+        held.clear();
+        for (auto& row : applied) {
+            for (auto& b : row) b = false;
+        }
         synthDown = false;
         acTimer = 0.0;
         acFresh = true;
@@ -530,7 +580,7 @@ struct CBTTab {
 inline std::vector<CBTTab> const& cbtTabs() {
     static std::vector<CBTTab> t = {
         {"Input",
-         "+ delays your clicks. - is the earliest the game\nallows (start of the frame). Sub-frame timing.",
+         "+ delays your clicks. 0 or - = no delay: the game\ncannot apply a click before you make it.",
          {
             {"Input Offset (ms)", &cbt::cfg.offsetOn, &cbt::cfg.offsetMs, -350, 350, 0},
             {"Click Sound", &cbt::cfg.clickSound, nullptr, 0, 0, 0},
@@ -542,7 +592,7 @@ inline std::vector<CBTTab> const& cbtTabs() {
             {"Hold To Click", &cbt::cfg.clickerHold, nullptr, 0, 0, 0},
          }},
         {"Speed",
-         "FPS changer is experimental and may do nothing\non some devices. TPS 240 = normal.",
+         "TPS Sub-step splits frames into smaller updates;\nGD may still run physics at 240. FPS is experimental.",
          {
             {"Timescale", &cbt::cfg.timescaleOn, &cbt::cfg.timescale, 0.1, 10, 0},
             {"TPS Sub-step", &cbt::cfg.tpsOn, &cbt::cfg.tps, 240, 1000, 0},
@@ -788,35 +838,27 @@ void cbt::openPanel() {
 // ---------------------------------------------------------------------------
 class $modify(CBTBaseLayer, GJBaseGameLayer) {
     void handleButton(bool down, int button, bool isPlayer1) {
-        if (cbt::delivering || !cbt::inLevel(this)) {
+        // Observer only: this never swallows or delays a command. It tracks
+        // what the game thinks is held and repairs a lost release (the
+        // "inputs stop until restart" state) before applying a new press.
+        if (!cbt::inLevel(this) || button < 0 || button > 3) {
             GJBaseGameLayer::handleButton(down, button, isPlayer1);
             return;
         }
 
-        // Real player input from here on.
-        if (button == 1) cbt::userHold = down;
-        if (down) {
+        bool& isHeld = cbt::applied[isPlayer1 ? 0 : 1][button];
+
+        if (down && isHeld) {
+            // A press arrived while the game still thinks the button is held,
+            // so a release went missing. Release first, then press.
+            GJBaseGameLayer::handleButton(false, button, isPlayer1);
+        }
+        isHeld = down;
+
+        // Real presses are counted in takeInputs when we own the queue.
+        if (down && button == 1 && !cbt::delivering && !cbt::takeActive()) {
             cbt::registerClick();
-            if (cbt::cfg.clickSound) {
-                FMODAudioEngine::sharedEngine()->playEffect("playSound_01.ogg", 1.f, 0.f, 0.5f);
-            }
-        }
-
-        if (!cbt::live()) {
-            cbt::flushPending(this);
-            GJBaseGameLayer::handleButton(down, button, isPlayer1);
-            return;
-        }
-
-        // The auto clicker owns the jump button while it is on.
-        if (cbt::cfg.clickerOn && button == 1) return;
-
-        if (cbt::cfg.offsetOn) {
-            cbt::pending.push_back({
-                down, button, isPlayer1,
-                cbt::nowSec() + cbt::cfg.offsetMs / 1000.0
-            });
-            return;
+            cbt::playClickSound();
         }
 
         GJBaseGameLayer::handleButton(down, button, isPlayer1);
@@ -842,7 +884,7 @@ class $modify(CBTBaseLayer, GJBaseGameLayer) {
         cbt::applyTimescale(pl);
 
         if (!cbt::live()) {
-            cbt::flushPending(this);
+            cbt::flushHeld(this);
             cbt::releaseSynth(this);
             cbt::accumulator = 0.0;
             GJBaseGameLayer::update(dt);
@@ -852,10 +894,15 @@ class $modify(CBTBaseLayer, GJBaseGameLayer) {
 
         float d = cbt::lagAdjust(dt);
 
-        bool stepping = cbt::cfg.tpsOn || cbt::cfg.offsetOn || cbt::cfg.clickerOn;
+        bool take = cbt::takeActive();
+
+        // Features that own the queue were turned off: apply anything we
+        // were still holding, and let go of a clicker press.
+        if (!take && !cbt::held.empty()) cbt::flushHeld(this);
+        if (!cbt::cfg.clickerOn) cbt::releaseSynth(this);
+
+        bool stepping = cbt::cfg.tpsOn || take;
         if (!stepping) {
-            cbt::releaseSynth(this);
-            cbt::flushPending(this);
             cbt::accumulator = 0.0;
             GJBaseGameLayer::update(d);
             cbt::musicTick(pl, now);
@@ -869,16 +916,19 @@ class $modify(CBTBaseLayer, GJBaseGameLayer) {
         // Real-time moment of the first sub-step of this frame.
         double t = now - cbt::accumulator;
 
+        // Take this frame's real inputs out of the game's own queue.
+        if (take) cbt::takeInputs(this, t);
+
         constexpr int kMaxSteps = 96;
         int n = 0;
 
         while (cbt::accumulator >= step && n < kMaxSteps) {
             cbt::clickerStep(this, step);
 
-            while (!cbt::pending.empty() && cbt::pending.front().due <= t + 1e-6) {
-                auto p = cbt::pending.front();
-                cbt::pending.pop_front();
-                cbt::deliver(this, p.down, p.button, p.p1);
+            while (!cbt::held.empty() && cbt::held.front().due <= t + 1e-6) {
+                auto h = cbt::held.front();
+                cbt::held.pop_front();
+                cbt::deliver(this, h.push, static_cast<int>(h.button), !h.isP2);
             }
 
             GJBaseGameLayer::update(static_cast<float>(step));
